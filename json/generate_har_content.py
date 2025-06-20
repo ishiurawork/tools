@@ -20,23 +20,39 @@ def deep_merge(dst: dict, src: dict) -> dict:
             dst[k] = v
     return dst
 
-def merge_partial_json(files: list[Path]) -> dict:
-    """複数の {"log":{"entries":[...]}} を entries のインデックスでマージ"""
+def merge_partial_json(files: list[Path], mode: str = "append") -> dict:
+    """複数の {"log":{"entries":[...]}} をマージ
+    
+    Args:
+        files: マージするJSONファイルのリスト
+        mode: "append" (連結) または "update" (インデックスでマージ)
+    """
     parts = [json.loads(p.read_text()) for p in files]
-    # entries 配列の長さが異なる場合は最大に合わせて、不足分は空オブジェクトとして扱う
-    lengths = [len(p["log"]["entries"]) for p in parts]
-    max_len = max(lengths)
-
-    merged_entries = []
-    for i in range(max_len):
-        m = {}
+    
+    if mode == "append":
+        # 単純に全エントリを連結
+        merged_entries = []
         for p in parts:
-            # インデックスが存在する場合のみマージ
-            if i < len(p["log"]["entries"]):
-                deep_merge(m, p["log"]["entries"][i])
-        merged_entries.append(m)
+            merged_entries.extend(p["log"]["entries"])
+        return {"log": {"entries": merged_entries}}
+    
+    elif mode == "update":
+        # entries 配列の長さが異なる場合は最大に合わせて、不足分は空オブジェクトとして扱う
+        lengths = [len(p["log"]["entries"]) for p in parts]
+        max_len = max(lengths)
 
-    return {"log": {"entries": merged_entries}}
+        merged_entries = []
+        for i in range(max_len):
+            m = {}
+            for p in parts:
+                # インデックスが存在する場合のみマージ
+                if i < len(p["log"]["entries"]):
+                    deep_merge(m, p["log"]["entries"][i])
+            merged_entries.append(m)
+        return {"log": {"entries": merged_entries}}
+    
+    else:
+        raise ValueError(f"Unknown merge mode: {mode}")
 
 def extract_from_har(args) -> dict:
     """HAR から expr1〜expr3 を抜き取って JSON 生成"""
@@ -67,6 +83,10 @@ def main() -> None:
                     help="入力 HAR ファイル。expr1〜3 と併用")
     mx.add_argument("--partial-json-files", nargs="+", type=Path,
                     metavar="JSON", help="部分 JSON ファイルをマージ")
+    
+    # partial-json-files 用オプション
+    ap.add_argument("--merge-mode", choices=["append", "update"], default="append",
+                    help="マージモード: append(連結) または update(インデックスでマージ), default: append")
 
     # extract-har 用オプション
     ap.add_argument("--expr1", help="JMESPath after log.entries[] 例: response.status")
@@ -80,7 +100,7 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.partial_json_files:
-        result = merge_partial_json(args.partial_json_files)
+        result = merge_partial_json(args.partial_json_files, args.merge_mode)
     else:
         # expr1〜3 必須チェック
         for name in ("expr1", "expr2", "expr3"):
