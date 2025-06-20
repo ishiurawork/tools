@@ -30,7 +30,9 @@ def main() -> None:
     ap.add_argument("--expr3", required=True,
                     help="JMESPath expr after log.entries[]  (例: request.method)")
     ap.add_argument("--filter", default='/(click|imp)',
-                    help="expr2 に対して適用する grep -E 相当の正規表現")
+                    help="指定されたexprに対して適用する grep -E 相当の正規表現")
+    ap.add_argument("--filter-apply-no", choices=[1, 2, 3], type=int, default=2,
+                    help="フィルタを適用するexprの番号 (1=expr1, 2=expr2, 3=expr3, default=2)")
     args = ap.parse_args()
 
     har = json.loads(args.har.read_text())
@@ -44,8 +46,10 @@ def main() -> None:
         v1 = jmespath.search(args.expr1, e)
         v2 = jmespath.search(args.expr2, e)
         v3 = jmespath.search(args.expr3, e)
-        # expr2 の値が str でフィルタに合致するものだけ採用
-        if isinstance(v2, str) and pat.search(v2):
+        
+        # 指定されたexprの値に対してフィルタを適用
+        target_value = [v1, v2, v3][args.filter_apply_no - 1]
+        if isinstance(target_value, str) and pat.search(target_value):
             d = deep_merge(nest(key1, v1), nest(key2, v2))
             d = deep_merge(d, nest(key3, v3))
             snippets.append(d)
