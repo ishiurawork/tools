@@ -23,15 +23,17 @@ def deep_merge(dst: dict, src: dict) -> dict:
 def merge_partial_json(files: list[Path]) -> dict:
     """複数の {"log":{"entries":[...]}} を entries のインデックスでマージ"""
     parts = [json.loads(p.read_text()) for p in files]
-    # entries 配列の長さが異なる場合は最小に合わせる
+    # entries 配列の長さが異なる場合は最大に合わせて、不足分は空オブジェクトとして扱う
     lengths = [len(p["log"]["entries"]) for p in parts]
-    min_len = min(lengths)
+    max_len = max(lengths)
 
     merged_entries = []
-    for i in range(min_len):
+    for i in range(max_len):
         m = {}
         for p in parts:
-            deep_merge(m, p["log"]["entries"][i])
+            # インデックスが存在する場合のみマージ
+            if i < len(p["log"]["entries"]):
+                deep_merge(m, p["log"]["entries"][i])
         merged_entries.append(m)
 
     return {"log": {"entries": merged_entries}}
